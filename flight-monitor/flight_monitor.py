@@ -121,90 +121,89 @@ def should_alert(route_key: str, price: float, state: AlertState, config: Dict) 
 # ──────────────────────────────────────────────
 # AviationStack API
 # ──────────────────────────────────────────────
-def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
-    """Busca voos via AviationStack /flights endpoint."""
-    travel = config["travel"]
-    api_key = config["aviationstack"]["api_key"]
-    base_url = config["aviationstack"].get("base_url", "http://api.aviationstack.com/v1")
 
-    # AviationStack free plan: busca voos por data + rota
-    # Usamos endpoint /flights com filtros de dep/arr iataCode + data
+def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
+    """Busca preços de passagens pelo Google Flights via SerpApi."""
+    import os
+
+    travel = config["travel"]
+    api_key = os.environ.get("SERPAPI_KEY")
+
+    if not api_key:
+        log.error("SERPAPI_KEY não configurada")
+        return []
+
     params = {
-        "access_key": api_key,
-        "dep_iata": route.origin,
-        "arr_iata": route.destination,
-        "flight_date": travel["departure_date"],
-        "limit": config["travel"]["max_results_per_route"],
+        "engine": "google_flights",
+        "api_key": api_key,
+        "departure_id": route.origin,
+        "arrival_id": route.destination,
+        "outbound_date": travel["departure_date"],
+        "currency": "BRL",
+        "hl": "pt",
+        "type": "1",  # Ida e volta
+        "inbound_date": travel["return_date"],
     }
 
-    url = f"{base_url}/flights"
-
     try:
-        resp = requests.get(url, params=params, timeout=20)
+        resp = requests.get(
+            "https://serpapi.com/search.json",
+            params=params,
+            timeout=30,
+        )
         resp.raise_for_status()
         data = resp.json()
-    except Exception as e:
-        log.error(f"Erro AviationStack [{route.label}]: {e}")
+
+        if data.get("error"):
+            log.error(f"Erro SerpApi [{route.label}]: {data['error']}")
+            return []
+
+    except requests.RequestException as e:
+        log.error(f"Erro SerpApi [{route.label}]: {e}")
         return []
 
     offers = []
-    for flight in data.get("data", []):
+
+    flights_found = (
+        data.get("best_flights", [])
+        + data.get("other_flights", [])
+    )
+
+    for item in flights_found:
         try:
-            # AviationStack retorna preço em "price" (pode vir nulo no free plan)
-            price_raw = flight.get("price")
-            if price_raw is None:
-                # Free plan às vezes não retorna preço — pula
+            price = item.get("price")
+            flights = item.get("flights", [])
+
+            if price is None or not flights:
                 continue
-            price_brl = float(price_raw)
-            currency = "BRL"  # API retorna em USD geralmente; assumimos BRL se não vier moeda
 
-            # Horários
-            dep = flight.get("departure", {})
-            arr = flight.get("arrival", {})
-            departure_time = dep.get("scheduled", "")[11:16] if dep.get("scheduled") else "??:??"
-            arrival_time = arr.get("scheduled", "")[11:16] if arr.get("scheduled") else "??:??"
+            first = flights[0]
+            last = flights[-1]
 
-            # Airline
-            airline = flight.get("airline", {}).get("iata", "??")
-
-            # Duração (em minutos → "XhYm")
-            duration_min = flight.get("flight", {}).get("duration", 0)
-            if duration_min:
-                h = duration_min // 60
-                m = duration_min % 60
-                duration = f"{h}h{m:02dm}" if h else f"{m}m"
-            else:
-                duration = "?"
-
-            # Stops (simplificado: se codeshare ou não direto)
-            stops = 0 if flight.get("flight", {}).get("codeshared") is None else 1
-
-            # Link de reserva (Google Flights genérico)
-            booking_link = (
-                f"https://www.google.com/travel/flights?q=Flights%20from%20{route.origin}"
-                f"%20to%20{route.destination}%20on%20{travel['departure_date']}%20return%20{travel['return_date']}"
-            )
+            dep = first.get("departure_airport", {})
+            arr = last.get("arrival_airport", {})
 
             offers.append(FlightOffer(
                 route=route,
-                price_brl=price_brl,
-                currency=currency,
+                price_brl=float(price),
+                currency="BRL",
                 departure_date=travel["departure_date"],
                 return_date=travel["return_date"],
-                airline=airline,
-                departure_time=departure_time,
-                arrival_time=arrival_time,
-                duration=duration,
-                stops=stops,
-                booking_link=booking_link,
-                raw=flight,
+                airline=first.get("airline", "Não informado"),
+                departure_time=dep.get("time", "")[-5:],
+                arrival_time=arr.get("time", "")[-5:],
+                duration=f"{item.get('total_duration', 0)} min",
+                stops=max(0, len(flights) - 1),
+                booking_link=(
+                    "https://www.google.com/travel/flights"
+                ),
+                raw=item,
             ))
-        except (KeyError, ValueError, TypeError) as e:
-            log.warning(f"Erro parseando voo: {e}")
-            continue
+
+        except (ValueError, TypeError, KeyError) as e:
+            log.warning(f"Erro processando oferta: {e}")
 
     return sorted(offers, key=lambda x: x.price_brl)
-
 
 # ──────────────────────────────────────────────
 # Notificações (inalterado)

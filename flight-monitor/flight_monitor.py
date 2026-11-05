@@ -529,11 +529,10 @@ def main() -> int:
             subject, html, whatsapp_msg = format_alert_message(cheap_offers, config)
             
             
-            log.info(
-                f"[TESTE] E-mail não enviado: {subject}"
-            )
-            email_ok = False
-            whatsapp_ok = False
+            
+            email_ok = send_email(config, subject, html)
+            whatsapp_ok = False  # WhatsApp temporariamente desativado
+
 
 
             if email_ok or whatsapp_ok:

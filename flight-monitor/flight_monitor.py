@@ -257,9 +257,32 @@ def send_whatsapp(config: Dict, message: str) -> bool:
 
 
 def format_alert_message(offers: List[FlightOffer], config: Dict):
+    
     travel = config["travel"]
     route = offers[0].route
-    subject = f"✈️ Promoção: {route.label} por R$ {offers[0].price_brl:.2f} (ida {travel['departure_date']} / volta {travel['return_date']})"
+
+    best_price = offers[0].price_brl
+
+    excellent_limit = next(
+        (
+            r.get("excellent_price_brl", r["max_price_brl"])
+            for r in config["routes"]
+            if r["origin"] == route.origin
+            and r["destination"] == route.destination
+        ),
+        route.max_price_brl,
+    )
+
+    if best_price <= excellent_limit:
+        category = "🔥 PROMOÇÃO EXCELENTE"
+    else:
+        category = "✈️ PREÇO INTERESSANTE"
+
+    subject = (
+        f"{category}: {route.label} por R$ {best_price:.2f} "
+        f"(ida {travel['departure_date']} / volta {travel['return_date']})"
+    )
+
 
     rows = ""
     for o in offers:

@@ -1,0 +1,32 @@
+routes:
+  - origin: "POA"
+    destination: "FLN"
+    max_price_brl: 250
+    label: "Porto Alegre → Florianópolis"
+  - origin: "POA"
+    destination: "CWB"
+    max_price_brl: 300
+    label: "Porto Alegre → Curitiba"
+
+travel:
+  departure_date: "2027-05-14"
+  return_date: "2027-05-16"
+  currency: "BRL"
+  adults: 1
+  max_results_per_route: 10
+
+amadeus:
+  base_url: "https://test.api.amadeus.com"
+
+evolution_api:
+  send_delay_seconds: 2
+
+email:
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  from_name: "Flight Monitor"
+  to: "seu@email.com"
+
+alert:
+  cooldown_hours: 12
+  price_drop_threshold_pct: 10

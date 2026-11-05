@@ -1,11 +1,15 @@
+
 routes:
   - origin: "POA"
     destination: "FLN"
-    max_price_brl: 250
+    max_price_brl: 450
+    excellent_price_brl: 300
     label: "Porto Alegre → Florianópolis"
+
   - origin: "POA"
     destination: "CWB"
-    max_price_brl: 300
+    max_price_brl: 500
+    excellent_price_brl: 350
     label: "Porto Alegre → Curitiba"
 
 travel:

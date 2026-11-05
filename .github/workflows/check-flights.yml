@@ -7,6 +7,12 @@ on:
     - cron: "0 0 * * *"
 
   workflow_dispatch:
+    inputs:
+      test_email:
+        description: "Enviar e-mail de teste?"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read

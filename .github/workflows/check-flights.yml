@@ -39,7 +39,8 @@ jobs:
 
       - name: Run Flight Monitor
         working-directory: ./flight-monitor
-        env:
+        env:        
+          TEST_EMAIL: ${{ inputs.test_email && '1' || '0' }}
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
           EVOLUTION_BASE_URL: ${{ secrets.EVOLUTION_BASE_URL }}

@@ -527,8 +527,13 @@ def main() -> int:
         if should_alert(route_key, cheap_offers[0].price_brl, state, config):
             subject, html, whatsapp_msg = format_alert_message(cheap_offers, config)
             
-            email_ok = send_email(config, subject, html)
-            whatsapp_ok = False  # WhatsApp temporariamente desativado
+            
+            log.info(
+                f"[TESTE] E-mail não enviado: {subject}"
+            )
+            email_ok = False
+            whatsapp_ok = False
+
 
             if email_ok or whatsapp_ok:
                 state.last_notified_price[route_key] = cheap_offers[0].price_brl

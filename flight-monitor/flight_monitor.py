@@ -99,23 +99,29 @@ def save_state(state: AlertState) -> None:
         json.dump(asdict(state), f, ensure_ascii=False, indent=2)
 
 
+
 def should_alert(route_key: str, price: float, state: AlertState, config: Dict) -> bool:
-    cooldown_h = config["alert"]["cooldown_hours"]
-    drop_pct = config["alert"]["price_drop_threshold_pct"]
-
     last_price = state.last_notified_price.get(route_key)
-    last_at_str = state.last_notified_at.get(route_key)
 
-    if last_at_str:
-        last_at = datetime.fromisoformat(last_at_str)
-        if datetime.now() - last_at < timedelta(hours=cooldown_h):
-            if last_price and price <= last_price * (1 - drop_pct / 100):
-                log.info(f"[{route_key}] Queda de {drop_pct}%+ detectada (R$ {last_price:.2f} → R$ {price:.2f}) — alertando!")
-                return True
-            log.debug(f"[{route_key}] Em cooldown ({cooldown_h}h), preço R$ {price:.2f} — silencioso")
-            return False
+    # Primeira oferta encontrada dentro do limite
+    if last_price is None:
+        log.info(f"[{route_key}] Primeira promoção: R$ {price:.2f}")
+        return True
 
-    return True
+    # Nova oferta mais barata que a última notificada
+    if price < last_price - 0.01:
+        log.info(
+            f"[{route_key}] Novo preço menor: "
+            f"R$ {last_price:.2f} → R$ {price:.2f}"
+        )
+        return True
+
+    # Mesmo preço ou preço maior: não repetir o alerta
+    log.info(
+        f"[{route_key}] Sem nova queda de preço "
+        f"(atual: R$ {price:.2f}, último alerta: R$ {last_price:.2f})"
+    )
+    return False
 
 
 # ──────────────────────────────────────────────

@@ -38,7 +38,7 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: |
-          python flight_monitor.py
+          python flight-monitor/flight_monitor.py
 
       - name: Commit alert_state.json if changed
         run: |

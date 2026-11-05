@@ -323,14 +323,15 @@ def main() -> int:
     config = load_config()
     state = load_state()
 
-    # Validações
+    # Validações    
     
     required = [
-        ("aviationstack.api_key", config["aviationstack"].get("api_key")),
+        ("SERPAPI_KEY", os.environ.get("SERPAPI_KEY")),
         ("email.smtp_user", config["email"].get("smtp_user")),
         ("email.smtp_password", config["email"].get("smtp_password")),
         ("email.to", config["email"].get("to")),
     ]
+
     missing = [k for k, v in required if not v]
     if missing:
         log.error(f"Configurações obrigatórias ausentes: {missing}")

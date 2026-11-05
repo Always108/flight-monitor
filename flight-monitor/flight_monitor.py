@@ -197,7 +197,7 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
             f"departure_token_presente={bool(first_result.get('departure_token'))}; "
             f"chaves={list(first_result.keys())}"
         )
-     for item in results:
+    for item in results:
         try:
             flights = item.get("flights", [])
             price = item.get("price")

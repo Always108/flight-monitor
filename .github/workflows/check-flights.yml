@@ -31,6 +31,7 @@ jobs:
       - name: Run Flight Monitor
         working-directory: ./flight-monitor
         env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
           EVOLUTION_BASE_URL: ${{ secrets.EVOLUTION_BASE_URL }}
           EVOLUTION_INSTANCE: ${{ secrets.EVOLUTION_INSTANCE }}

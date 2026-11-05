@@ -146,8 +146,8 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
         "api_key": api_key,
         "departure_id": route.origin,
         "arrival_id": route.destination,
-        "outbound_date": travel["departure_date"],
-        "inbound_date": travel["return_date"],
+        "outbound_date": travel["departure_date"],        
+        "return_date": travel["return_date"],
         "type": "1",  # Ida e volta
         "currency": "BRL",
         "hl": "pt",

@@ -328,11 +328,9 @@ def main() -> int:
     state = load_state()
 
     # Validações
+    
     required = [
         ("aviationstack.api_key", config["aviationstack"].get("api_key")),
-        ("evolution_api.base_url", config["evolution_api"].get("base_url")),
-        ("evolution_api.instance", config["evolution_api"].get("instance")),
-        ("evolution_api.token", config["evolution_api"].get("token")),
         ("email.smtp_user", config["email"].get("smtp_user")),
         ("email.smtp_password", config["email"].get("smtp_password")),
         ("email.to", config["email"].get("to")),
@@ -341,6 +339,7 @@ def main() -> int:
     if missing:
         log.error(f"Configurações obrigatórias ausentes: {missing}")
         return 1
+
 
     routes = [Route(**r) for r in config["routes"]]
     any_alert = False

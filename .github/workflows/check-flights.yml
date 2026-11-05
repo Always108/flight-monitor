@@ -29,6 +29,7 @@ jobs:
           pip install -r flight-monitor/requirements.txt
 
       - name: Run Flight Monitor
+        working-directory: ./flight-monitor
         env:
           AVIATIONSTACK_KEY: ${{ secrets.AVIATIONSTACK_KEY }}
           EVOLUTION_BASE_URL: ${{ secrets.EVOLUTION_BASE_URL }}
@@ -38,9 +39,10 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: |
-          python flight-monitor/flight_monitor.py
+          python flight_monitor.py
 
       - name: Commit alert_state.json if changed
+        working-directory: ./flight-monitor
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

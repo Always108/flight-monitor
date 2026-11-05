@@ -41,15 +41,22 @@ jobs:
         run: |
           python flight_monitor.py
 
+      
       - name: Commit alert_state.json if changed
         working-directory: ./flight-monitor
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet alert_state.json; then
+
+          if [ -f alert_state.json ]; then
             git add alert_state.json
-            git commit -m "chore: update alert state [skip ci]"
-            git push
+
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: update alert state [skip ci]"
+              git push
+            else
+              echo "Nenhuma alteração no histórico de alertas"
+            fi
           else
-            echo "No state changes"
+            echo "alert_state.json ainda não existe. Nada para salvar."
           fi

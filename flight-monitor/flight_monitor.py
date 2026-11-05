@@ -41,6 +41,7 @@ class Route:
     label: str
     excellent_price_brl: float = 0.0
 
+
 @dataclass
 class FlightOffer:
     route: Route
@@ -55,6 +56,16 @@ class FlightOffer:
     stops: int
     booking_link: str
     raw: Dict[str, Any]
+
+    # Informações do voo de retorno
+    return_airline: str = ""
+    return_departure_time: str = ""
+    return_arrival_time: str = ""
+    return_duration: str = ""
+    return_stops: int = -1
+
+    # Indica se ida e volta são diretas
+    both_direct: bool = False
 
 @dataclass
 class AlertState:

@@ -122,8 +122,9 @@ def should_alert(route_key: str, price: float, state: AlertState, config: Dict) 
 # AviationStack API
 # ──────────────────────────────────────────────
 
+
 def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
-    """Busca preços de passagens pelo Google Flights via SerpApi."""
+    """Pesquisa passagens de ida e volta pelo Google Flights via SerpApi."""
     import os
 
     travel = config["travel"]
@@ -139,10 +140,11 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
         "departure_id": route.origin,
         "arrival_id": route.destination,
         "outbound_date": travel["departure_date"],
+        "inbound_date": travel["return_date"],
+        "type": "1",  # Ida e volta
         "currency": "BRL",
         "hl": "pt",
-        "type": "1",  # Ida e volta
-        "inbound_date": travel["return_date"],
+        "adults": travel.get("adults", 1),
     }
 
     try:
@@ -158,23 +160,20 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
             log.error(f"Erro SerpApi [{route.label}]: {data['error']}")
             return []
 
-    except requests.RequestException as e:
+    except (requests.RequestException, ValueError) as e:
         log.error(f"Erro SerpApi [{route.label}]: {e}")
         return []
 
     offers = []
 
-    flights_found = (
-        data.get("best_flights", [])
-        + data.get("other_flights", [])
-    )
+    results = data.get("best_flights", []) + data.get("other_flights", [])
 
-    for item in flights_found:
+    for item in results:
         try:
-            price = item.get("price")
             flights = item.get("flights", [])
+            price = item.get("price")
 
-            if price is None or not flights:
+            if not flights or price is None:
                 continue
 
             first = flights[0]
@@ -194,13 +193,11 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
                 arrival_time=arr.get("time", "")[-5:],
                 duration=f"{item.get('total_duration', 0)} min",
                 stops=max(0, len(flights) - 1),
-                booking_link=(
-                    "https://www.google.com/travel/flights"
-                ),
+                booking_link="https://www.google.com/travel/flights",
                 raw=item,
             ))
 
-        except (ValueError, TypeError, KeyError) as e:
+        except (KeyError, TypeError, ValueError) as e:
             log.warning(f"Erro processando oferta: {e}")
 
     return sorted(offers, key=lambda x: x.price_brl)

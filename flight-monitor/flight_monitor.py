@@ -502,10 +502,9 @@ def main() -> int:
     missing = [k for k, v in required if not v]
     if missing:
         log.error(f"Configurações obrigatórias ausentes: {missing}")
-        return 1
-
-  
-        if os.environ.get("TEST_EMAIL") == "1":
+        return 1  
+        
+    if os.environ.get("TEST_EMAIL") == "1":
         log.info("Iniciando teste de envio do Gmail")
         email_ok = send_email(
             config,

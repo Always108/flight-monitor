@@ -181,6 +181,14 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
     offers = []
 
     results = data.get("best_flights", []) + data.get("other_flights", [])
+    
+    log.info(
+        f"[{route.label}] SerpApi: "
+        f"{len(results)} opções encontradas; "
+        f"tipo de viagem: {params['type']}; "
+        f"data de volta: {params['return_date']}"
+    )
+
 
     for item in results:
         try:

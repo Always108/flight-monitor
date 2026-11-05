@@ -215,11 +215,13 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
 
     # Economizar consultas: só verificar retornos
     # quando o preço inicial atingir o limite.
+   
+    # TESTE TEMPORÁRIO: consultar apenas uma opção de retorno
     candidates = [
         item for item in results
-        if float(item["price"]) <= route.max_price_brl
-        and item.get("departure_token")
-    ][:3]
+        if item.get("departure_token")
+    ][:1]
+
 
     if not candidates:
         if results:

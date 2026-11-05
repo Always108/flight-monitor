@@ -15,8 +15,8 @@ travel:
   adults: 1
   max_results_per_route: 10
 
-amadeus:
-  base_url: "https://test.api.amadeus.com"
+aviationstack:
+  base_url: "http://api.aviationstack.com/v1"
 
 evolution_api:
   send_delay_seconds: 2

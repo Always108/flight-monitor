@@ -380,7 +380,7 @@ name: Check Flight Prices
 
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 permissions:

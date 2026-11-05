@@ -504,7 +504,8 @@ def main() -> int:
         log.error(f"Configurações obrigatórias ausentes: {missing}")
         return 1
 
-   if os.environ.get("TEST_EMAIL") == "1":
+  
+        if os.environ.get("TEST_EMAIL") == "1":
         log.info("Iniciando teste de envio do Gmail")
         email_ok = send_email(
             config,
@@ -514,7 +515,9 @@ def main() -> int:
             "uma mensagem pelo Gmail.</p>"
         )
         return 0 if email_ok else 1
+
     routes = [Route(**r) for r in config["routes"]]
+
     any_alert = False
 
     for route in routes:

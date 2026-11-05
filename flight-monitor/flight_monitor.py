@@ -187,10 +187,7 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
         f"{len(results)} opções encontradas; "
         f"tipo de viagem: {params['type']}; "
         f"data de volta: {params['return_date']}"
-    )
-
-
-    for item in results:
+    )    
         
     if results:
         first_result = results[0]
@@ -200,7 +197,7 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
             f"departure_token_presente={bool(first_result.get('departure_token'))}; "
             f"chaves={list(first_result.keys())}"
         )
-
+     for item in results:
         try:
             flights = item.get("flights", [])
             price = item.get("price")

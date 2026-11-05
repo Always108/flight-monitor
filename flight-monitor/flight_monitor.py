@@ -198,8 +198,15 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
                 departure_time=dep.get("time", "")[-5:],
                 arrival_time=arr.get("time", "")[-5:],
                 duration=f"{item.get('total_duration', 0)} min",
-                stops=max(0, len(flights) - 1),
-                booking_link="https://www.google.com/travel/flights",
+                stops=max(0, len(flights) - 1),                
+                booking_link=(
+                    "https://www.google.com/travel/flights"
+                    f"?q=Flights%20from%20{route.origin}"
+                    f"%20to%20{route.destination}"
+                    f"%20on%20{travel['departure_date']}"
+                    f"%20returning%20{travel['return_date']}"
+                ),
+
                 raw=item,
             ))
 

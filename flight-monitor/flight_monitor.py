@@ -320,7 +320,7 @@ def format_alert_message(offers: List[FlightOffer], config: Dict):
                 <tr style="background: #f5f5f5;">
                     <th style="padding: 10px; text-align: left;">Cia</th>
                     <th style="padding: 10px; text-align: left;">Preço</th>
-                    <th style="padding: 10px; text-align: left;">Horário</th>
+                    <th style="padding: 10px; text-align: left;">Horário da ida</th>
                     <th style="padding: 10px; text-align: left;">Duração</th>
                     <th style="padding: 10px; text-align: left;">Paradas</th>
                     <th style="padding: 10px; text-align: left;">Ação</th>

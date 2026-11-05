@@ -409,9 +409,21 @@ def format_alert_message(offers: List[FlightOffer], config: Dict):
     )
 
 
-    rows = ""
+    rows = ""    
     for o in offers:
-        stops_text = "Direto" if o.stops == 0 else f"{o.stops} parada(s)"
+        if o.both_direct:
+            stops_text = "⭐ DIRETO NA IDA E NA VOLTA"
+        else:
+            ida = (
+                "Direto" if o.stops == 0
+                else f"{o.stops} parada(s)"
+            )
+            volta = (
+                "Direto" if o.return_stops == 0
+                else f"{o.return_stops} parada(s)"
+            )
+            stops_text = f"Ida: {ida} | Volta: {volta}"
+
         rows += f"""
         <tr>
             <td style="padding: 8px; border-bottom: 1px solid #eee;">{o.airline}</td>

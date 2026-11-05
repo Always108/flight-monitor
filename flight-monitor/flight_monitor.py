@@ -141,8 +141,9 @@ def should_alert(route_key: str, price: float, state: AlertState, config: Dict) 
 # ──────────────────────────────────────────────
 
 
+
 def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
-    """Pesquisa passagens de ida e volta pelo Google Flights via SerpApi."""
+    """Pesquisa ida e volta via SerpApi, confirmando o retorno."""
     import os
 
     travel = config["travel"]
@@ -157,97 +158,180 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
         "api_key": api_key,
         "departure_id": route.origin,
         "arrival_id": route.destination,
-        "outbound_date": travel["departure_date"],        
+        "outbound_date": travel["departure_date"],
         "return_date": travel["return_date"],
-        "type": "1",  # Ida e volta
+        "type": "1",
         "currency": "BRL",
+        "gl": "br",
         "hl": "pt",
         "adults": travel.get("adults", 1),
+        "sort_by": "2",
     }
 
-    try:
-        resp = requests.get(
-            "https://serpapi.com/search.json",
-            params=params,
-            timeout=30,
-        )
-        
-        data = resp.json()
-
-        if resp.status_code != 200:
-            log.error(
-                f"SerpApi retornou HTTP {resp.status_code}: "
-                f"{data.get('error', 'Erro sem descrição')}"
+    def consultar(parametros):
+        try:
+            resp = requests.get(
+                "https://serpapi.com/search.json",
+                params=parametros,
+                timeout=45,
             )
-            return []
+            data = resp.json()
 
-        if data.get("error"):
-            log.error(f"Erro SerpApi [{route.label}]: {data['error']}")
-            return []
+            if resp.status_code != 200 or data.get("error"):
+                log.error(
+                    f"[{route.label}] Erro SerpApi: "
+                    f"{data.get('error', resp.status_code)}"
+                )
+                return None
 
-    except (requests.RequestException, ValueError) as e:
-        log.error(f"Erro SerpApi [{route.label}]: {e}")
+            return data
+
+        except (requests.RequestException, ValueError) as e:
+            log.error(f"[{route.label}] Falha na consulta: {e}")
+            return None
+
+    data = consultar(params)
+
+    if data is None:
+        return []
+
+    results = (
+        data.get("best_flights", [])
+        + data.get("other_flights", [])
+    )
+
+    log.info(
+        f"[{route.label}] {len(results)} opções de ida encontradas"
+    )
+
+    # Ordenar por preço antes de escolher quais consultar.
+    results = sorted(
+        [
+            item for item in results
+            if item.get("price") is not None
+        ],
+        key=lambda item: float(item["price"]),
+    )
+
+    # Economizar consultas: só verificar retornos
+    # quando o preço inicial atingir o limite.
+    candidates = [
+        item for item in results
+        if float(item["price"]) <= route.max_price_brl
+        and item.get("departure_token")
+    ][:3]
+
+    if not candidates:
+        if results:
+            log.info(
+                f"[{route.label}] Menor preço inicial: "
+                f"R$ {float(results[0]['price']):.2f}; "
+                "nenhum candidato para confirmar retorno"
+            )
         return []
 
     offers = []
 
-    results = data.get("best_flights", []) + data.get("other_flights", [])
-    
-    log.info(
-        f"[{route.label}] SerpApi: "
-        f"{len(results)} opções encontradas; "
-        f"tipo de viagem: {params['type']}; "
-        f"data de volta: {params['return_date']}"
-    )    
-        
-    if results:
-        first_result = results[0]
-        log.info(
-            f"[{route.label}] Diagnóstico da primeira oferta: "
-            f"preço={first_result.get('price')}; "
-            f"departure_token_presente={bool(first_result.get('departure_token'))}; "
-            f"chaves={list(first_result.keys())}"
+    def horario(flight, campo):
+        airport = flight.get(campo, {})
+        return str(airport.get("time", ""))[-5:]
+
+    for outbound in candidates:
+        return_params = params.copy()
+        return_params["departure_token"] = outbound["departure_token"]
+
+        return_data = consultar(return_params)
+
+        if return_data is None:
+            continue
+
+        return_results = (
+            return_data.get("best_flights", [])
+            + return_data.get("other_flights", [])
         )
-    for item in results:
-        try:
-            flights = item.get("flights", [])
-            price = item.get("price")
 
-            if not flights or price is None:
-                continue
+        outbound_flights = outbound.get("flights", [])
 
-            first = flights[0]
-            last = flights[-1]
+        if not outbound_flights:
+            continue
 
-            dep = first.get("departure_airport", {})
-            arr = last.get("arrival_airport", {})
+        for inbound in return_results:
+            try:
+                inbound_flights = inbound.get("flights", [])
+                total_price = inbound.get("price")
 
-            offers.append(FlightOffer(
-                route=route,
-                price_brl=float(price),
-                currency="BRL",
-                departure_date=travel["departure_date"],
-                return_date=travel["return_date"],
-                airline=first.get("airline", "Não informado"),
-                departure_time=dep.get("time", "")[-5:],
-                arrival_time=arr.get("time", "")[-5:],
-                duration=f"{item.get('total_duration', 0)} min",
-                stops=max(0, len(flights) - 1),                
-                booking_link=(
-                    "https://www.google.com/travel/flights"
-                    f"?q=Flights%20from%20{route.origin}"
-                    f"%20to%20{route.destination}"
-                    f"%20on%20{travel['departure_date']}"
-                    f"%20returning%20{travel['return_date']}"
-                ),
+                if not inbound_flights or total_price is None:
+                    continue
 
-                raw=item,
-            ))
+                total_price = float(total_price)
 
-        except (KeyError, TypeError, ValueError) as e:
-            log.warning(f"Erro processando oferta: {e}")
+                if total_price <= 0:
+                    continue
 
-    return sorted(offers, key=lambda x: x.price_brl)
+                first_out = outbound_flights[0]
+                last_out = outbound_flights[-1]
+                first_in = inbound_flights[0]
+                last_in = inbound_flights[-1]
+
+                out_stops = len(outbound_flights) - 1
+                in_stops = len(inbound_flights) - 1
+
+                offers.append(FlightOffer(
+                    route=route,
+                    price_brl=total_price,
+                    currency="BRL",
+                    departure_date=travel["departure_date"],
+                    return_date=travel["return_date"],
+                    airline=first_out.get("airline", "Não informado"),
+                    departure_time=horario(
+                        first_out, "departure_airport"
+                    ),
+                    arrival_time=horario(
+                        last_out, "arrival_airport"
+                    ),
+                    duration=f"{outbound.get('total_duration', 0)} min",
+                    stops=out_stops,
+                    booking_link=(
+                        "https://www.google.com/travel/flights"
+                        f"?q=Flights%20from%20{route.origin}"
+                        f"%20to%20{route.destination}"
+                        f"%20on%20{travel['departure_date']}"
+                        f"%20returning%20{travel['return_date']}"
+                    ),
+                    raw={
+                        "outbound": outbound,
+                        "inbound": inbound,
+                    },
+                    return_airline=first_in.get(
+                        "airline", "Não informado"
+                    ),
+                    return_departure_time=horario(
+                        first_in, "departure_airport"
+                    ),
+                    return_arrival_time=horario(
+                        last_in, "arrival_airport"
+                    ),
+                    return_duration=f"{inbound.get('total_duration', 0)} min",
+                    return_stops=in_stops,
+                    both_direct=(
+                        out_stops == 0 and in_stops == 0
+                    ),
+                ))
+
+            except (KeyError, TypeError, ValueError) as e:
+                log.warning(
+                    f"[{route.label}] Erro processando retorno: {e}"
+                )
+
+    offers.sort(key=lambda x: x.price_brl)
+
+    log.info(
+        f"[{route.label}] {len(offers)} combinações "
+        "de ida e volta encontradas"
+    )
+
+    return offers[:travel.get("max_results_per_route", 10)]
+
 
 # ──────────────────────────────────────────────
 # Notificações (inalterado)

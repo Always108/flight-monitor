@@ -39,6 +39,7 @@ class Route:
     destination: str
     max_price_brl: float
     label: str
+    excellent_price_brl: float = 0.0
 
 @dataclass
 class FlightOffer:

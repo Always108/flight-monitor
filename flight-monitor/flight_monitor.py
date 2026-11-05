@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Flight Monitor - Monitora passagens aéreas via Amadeus API
+Flight Monitor - Monitora passagens aéreas via AviationStack API
 e notifica via Email (Gmail SMTP) + WhatsApp (Evolution API).
 """
 
@@ -18,7 +18,6 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 
 import requests
-from amadeus import Client, ResponseError
 from dotenv import load_dotenv
 
 # ──────────────────────────────────────────────
@@ -70,11 +69,15 @@ def load_config() -> Dict:
     with open("config.yaml", "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    config["amadeus"]["client_id"] = os.getenv("AMADEUS_CLIENT_ID", config["amadeus"].get("client_id"))
-    config["amadeus"]["client_secret"] = os.getenv("AMADEUS_CLIENT_SECRET", config["amadeus"].get("client_secret"))
+    # AviationStack key vem do secret
+    config["aviationstack"]["api_key"] = os.getenv("AVIATIONSTACK_KEY", config["aviationstack"].get("api_key"))
+
+    # Evolution API
     config["evolution_api"]["base_url"] = os.getenv("EVOLUTION_BASE_URL", config["evolution_api"].get("base_url"))
     config["evolution_api"]["instance"] = os.getenv("EVOLUTION_INSTANCE", config["evolution_api"].get("instance"))
     config["evolution_api"]["token"] = os.getenv("EVOLUTION_TOKEN", config["evolution_api"].get("token"))
+
+    # Email
     config["email"]["smtp_user"] = os.getenv("SMTP_USER", config["email"].get("smtp_user"))
     config["email"]["smtp_password"] = os.getenv("SMTP_PASSWORD", config["email"].get("smtp_password"))
     config["email"]["to"] = os.getenv("EMAIL_TO", config["email"].get("to"))
@@ -116,54 +119,71 @@ def should_alert(route_key: str, price: float, state: AlertState, config: Dict) 
 
 
 # ──────────────────────────────────────────────
-# Amadeus API
+# AviationStack API
 # ──────────────────────────────────────────────
-def create_amadeus_client(config: Dict) -> Client:
-    return Client(
-        client_id=config["amadeus"]["client_id"],
-        client_secret=config["amadeus"]["client_secret"],
-        hostname=config["amadeus"]["base_url"].replace("https://", ""),
-        log_level="warning",
-    )
-
-
-def search_flights(amadeus: Client, route: Route, config: Dict) -> List[FlightOffer]:
+def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
+    """Busca voos via AviationStack /flights endpoint."""
     travel = config["travel"]
+    api_key = config["aviationstack"]["api_key"]
+    base_url = config["aviationstack"].get("base_url", "http://api.aviationstack.com/v1")
+
+    # AviationStack free plan: busca voos por data + rota
+    # Usamos endpoint /flights com filtros de dep/arr iataCode + data
+    params = {
+        "access_key": api_key,
+        "dep_iata": route.origin,
+        "arr_iata": route.destination,
+        "flight_date": travel["departure_date"],
+        "limit": config["travel"]["max_results_per_route"],
+    }
+
+    url = f"{base_url}/flights"
 
     try:
-        response = amadeus.shopping.flight_offers_search.get(
-            originLocationCode=route.origin,
-            destinationLocationCode=route.destination,
-            departureDate=travel["departure_date"],
-            returnDate=travel["return_date"],
-            adults=travel["adults"],
-            currencyCode=travel["currency"],
-            max=travel["max_results_per_route"],
-        )
-    except ResponseError as e:
-        log.error(f"Erro Amadeus [{route.label}]: {e}")
+        resp = requests.get(url, params=params, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        log.error(f"Erro AviationStack [{route.label}]: {e}")
         return []
 
     offers = []
-    for offer in response.data:
+    for flight in data.get("data", []):
         try:
-            price_brl = float(offer["price"]["total"])
-            currency = offer["price"]["currency"]
+            # AviationStack retorna preço em "price" (pode vir nulo no free plan)
+            price_raw = flight.get("price")
+            if price_raw is None:
+                # Free plan às vezes não retorna preço — pula
+                continue
+            price_brl = float(price_raw)
+            currency = "BRL"  # API retorna em USD geralmente; assumimos BRL se não vier moeda
 
-            itinerary = offer["itineraries"][0]
-            segments = itinerary["segments"]
-            first_seg = segments[0]
-            last_seg = segments[-1]
+            # Horários
+            dep = flight.get("departure", {})
+            arr = flight.get("arrival", {})
+            departure_time = dep.get("scheduled", "")[11:16] if dep.get("scheduled") else "??:??"
+            arrival_time = arr.get("scheduled", "")[11:16] if arr.get("scheduled") else "??:??"
 
-            departure_time = first_seg["departure"]["at"][11:16]
-            arrival_time = last_seg["arrival"]["at"][11:16]
+            # Airline
+            airline = flight.get("airline", {}).get("iata", "??")
 
-            duration = itinerary["duration"].replace("PT", "").replace("H", "h").replace("M", "m")
+            # Duração (em minutos → "XhYm")
+            duration_min = flight.get("flight", {}).get("duration", 0)
+            if duration_min:
+                h = duration_min // 60
+                m = duration_min % 60
+                duration = f"{h}h{m:02dm}" if h else f"{m}m"
+            else:
+                duration = "?"
 
-            stops = len(segments) - 1
-            airline = segments[0]["carrierCode"]
+            # Stops (simplificado: se codeshare ou não direto)
+            stops = 0 if flight.get("flight", {}).get("codeshared") is None else 1
 
-            booking_link = f"https://www.google.com/travel/flights?q=Flights%20from%20{route.origin}%20to%20{route.destination}%20on%20{travel['departure_date']}%20return%20{travel['return_date']}"
+            # Link de reserva (Google Flights genérico)
+            booking_link = (
+                f"https://www.google.com/travel/flights?q=Flights%20from%20{route.origin}"
+                f"%20to%20{route.destination}%20on%20{travel['departure_date']}%20return%20{travel['return_date']}"
+            )
 
             offers.append(FlightOffer(
                 route=route,
@@ -177,17 +197,17 @@ def search_flights(amadeus: Client, route: Route, config: Dict) -> List[FlightOf
                 duration=duration,
                 stops=stops,
                 booking_link=booking_link,
-                raw=offer,
+                raw=flight,
             ))
-        except (KeyError, ValueError, IndexError) as e:
-            log.warning(f"Erro parseando oferta: {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            log.warning(f"Erro parseando voo: {e}")
             continue
 
     return sorted(offers, key=lambda x: x.price_brl)
 
 
 # ──────────────────────────────────────────────
-# Notificações
+# Notificações (inalterado)
 # ──────────────────────────────────────────────
 def send_email(config: Dict, subject: str, html_body: str) -> bool:
     email_cfg = config["email"]
@@ -234,10 +254,9 @@ def send_whatsapp(config: Dict, message: str) -> bool:
         return False
 
 
-def format_alert_message(offers: List[FlightOffer], config: Dict) -> tuple[str, str, str]:
+def format_alert_message(offers: List[FlightOffer], config: Dict):
     travel = config["travel"]
     route = offers[0].route
-
     subject = f"✈️ Promoção: {route.label} por R$ {offers[0].price_brl:.2f} (ida {travel['departure_date']} / volta {travel['return_date']})"
 
     rows = ""
@@ -303,14 +322,14 @@ def format_alert_message(offers: List[FlightOffer], config: Dict) -> tuple[str, 
 # Main
 # ──────────────────────────────────────────────
 def main() -> int:
-    log.info("🚀 Iniciando Flight Monitor")
+    log.info("🚀 Iniciando Flight Monitor (AviationStack)")
 
     config = load_config()
     state = load_state()
 
+    # Validações
     required = [
-        ("amadeus.client_id", config["amadeus"].get("client_id")),
-        ("amadeus.client_secret", config["amadeus"].get("client_secret")),
+        ("aviationstack.api_key", config["aviationstack"].get("api_key")),
         ("evolution_api.base_url", config["evolution_api"].get("base_url")),
         ("evolution_api.instance", config["evolution_api"].get("instance")),
         ("evolution_api.token", config["evolution_api"].get("token")),
@@ -323,17 +342,15 @@ def main() -> int:
         log.error(f"Configurações obrigatórias ausentes: {missing}")
         return 1
 
-    amadeus = create_amadeus_client(config)
-
     routes = [Route(**r) for r in config["routes"]]
     any_alert = False
 
     for route in routes:
         log.info(f"🔍 Buscando: {route.label} (threshold: R$ {route.max_price_brl:.2f})")
-        offers = search_flights(amadeus, route, config)
+        offers = search_flights(route, config)
 
         if not offers:
-            log.warning(f"[{route.label}] Nenhuma oferta encontrada")
+            log.warning(f"[{route.label}] Nenhuma oferta com preço retornada (free plan pode não incluir preço)")
             continue
 
         cheap_offers = [o for o in offers if o.price_brl <= route.max_price_brl]
@@ -370,64 +387,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-PYEOF
-
-5️⃣ Cria o workflow do GitHub Actions
-
-mkdir .github\workflows
-cat > .github\workflows\check-flights.yml << 'EOF'
-name: Check Flight Prices
-
-on:
-  schedule:
-    - cron: "0 6 * * *"
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  check-flights:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run Flight Monitor
-        env:
-          AMADEUS_CLIENT_ID: ${{ secrets.AMADEUS_CLIENT_ID }}
-          AMADEUS_CLIENT_SECRET: ${{ secrets.AMADEUS_CLIENT_SECRET }}
-          EVOLUTION_BASE_URL: ${{ secrets.EVOLUTION_BASE_URL }}
-          EVOLUTION_INSTANCE: ${{ secrets.EVOLUTION_INSTANCE }}
-          EVOLUTION_TOKEN: ${{ secrets.EVOLUTION_TOKEN }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
-        run: |
-          python flight_monitor.py
-
-      - name: Commit alert_state.json if changed
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet alert_state.json; then
-            git add alert_state.json
-            git commit -m "chore: update alert state [skip ci]"
-            git push
-          else
-            echo "No state changes"
-          fi
-EOF

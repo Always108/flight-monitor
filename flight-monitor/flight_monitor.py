@@ -191,6 +191,16 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
 
 
     for item in results:
+        
+    if results:
+        first_result = results[0]
+        log.info(
+            f"[{route.label}] Diagnóstico da primeira oferta: "
+            f"preço={first_result.get('price')}; "
+            f"departure_token_presente={bool(first_result.get('departure_token'))}; "
+            f"chaves={list(first_result.keys())}"
+        )
+
         try:
             flights = item.get("flights", [])
             price = item.get("price")

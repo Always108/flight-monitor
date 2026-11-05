@@ -160,8 +160,15 @@ def search_flights(route: Route, config: Dict) -> List[FlightOffer]:
             params=params,
             timeout=30,
         )
-        resp.raise_for_status()
+        
         data = resp.json()
+
+        if resp.status_code != 200:
+            log.error(
+                f"SerpApi retornou HTTP {resp.status_code}: "
+                f"{data.get('error', 'Erro sem descrição')}"
+            )
+            return []
 
         if data.get("error"):
             log.error(f"Erro SerpApi [{route.label}]: {data['error']}")
